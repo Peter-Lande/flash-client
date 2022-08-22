@@ -1,57 +1,54 @@
-pub enum Card {
-    Title(Vec<String>),
-    Flash(Vec<String>),
-    Error(String),
-    None,
+use serde::{Deserialize, Serialize};
+use std::error::Error;
+use std::fs;
+
+#[derive(Serialize, Deserialize)]
+pub struct Card {
+    title: String,
+    sections: Vec<String>,
 }
 
 impl Card {
     pub fn new() -> Self {
-        return Card::None;
+        return Card {
+            title: String::from(""),
+            sections: Vec::<String>::new(),
+        };
     }
-    pub fn make_title(self) -> Self {
-        match self {
-            Card::Title(info) => return Card::Title(info),
-            Card::Flash(info) => return Card::Title(info),
-            Card::Error(message) => return Card::Error(message),
-            Card::None => return Card::Title(Vec::new()),
+
+    pub fn read_from_file(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let input_text = fs::read_to_string(filename)?;
+        let input_object: Result<Card, Box<dyn Error>> = serde_json::from_str(&input_text)
+            .or_else(|err| Err(Box::new(err) as Box<dyn std::error::Error>));
+        return input_object;
+    }
+
+    pub fn write_to_file(self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let object_string_result = serde_json::to_string(&self)
+            .or_else(|err| Err(Box::new(err) as Box<dyn std::error::Error>));
+        match object_string_result {
+            Ok(object_string) => {
+                return fs::write(filename, object_string)
+                    .or_else(|err| Err(Box::new(err) as Box<dyn std::error::Error>))
+            }
+            Err(err) => return Err(err),
         }
     }
-    pub fn make_flash(self) -> Self {
-        match self {
-            Card::Title(info) => return Card::Flash(info),
-            Card::Flash(info) => return Card::Flash(info),
-            Card::Error(message) => return Card::Error(message),
-            Card::None => return Card::Title(Vec::new()),
-        }
+
+    pub fn set_title(self, title: &str) -> Self {
+        return Card {
+            title: title.to_owned(),
+            sections: self.sections,
+        };
     }
-    //TODO: Add ability to convert file to card and card to file
+
+    pub fn set_sections(self, sections: Vec<String>) -> Self {
+        return Card {
+            title: self.title,
+            sections: sections,
+        };
+    }
 
     //TODO: Add formatting to printing using a table library (add current section to enum?)
     //TODO: Add section incrementing and decrementing
-}
-
-impl From<Vec<String>> for Card {
-    fn from(input: Vec<String>) -> Self {
-        if input.len() != 0 {
-            match input[0].as_str() {
-                "TITLE" => return Card::Title(input[1..].to_vec()),
-                "FLASH" => return Card::Flash(input[1..].to_vec()),
-                _ => return Card::Error(String::from("Card type does not exist.")),
-            }
-        } else {
-            return Card::None;
-        }
-    }
-}
-
-impl From<String> for Card {
-    fn from(input: String) -> Self {
-        return Card::from(
-            input
-                .split("...")
-                .map(|string| string.to_owned())
-                .collect::<Vec<String>>(),
-        );
-    }
 }
