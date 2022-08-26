@@ -1,7 +1,7 @@
 #[derive(Copy, Clone)]
 pub enum ScreenState {
-    //First u8 is the header state, the second u8 is the body state.
-    LocalMenu(u8, u8),
+    //The u8 represents the state of the selection menu
+    LocalMenu(u8),
 }
 
 pub struct Screen {
@@ -34,6 +34,8 @@ impl Screen {
             let container = Screen::build_layout(f);
             let header = Screen::build_header(state);
             f.render_widget(header, container[0]);
+            let block = tui::widgets::Block::default().borders(tui::widgets::Borders::ALL);
+            f.render_widget(block, container[2]);
         })?;
         std::thread::sleep(std::time::Duration::from_millis(5000));
         Ok(())
@@ -58,7 +60,7 @@ impl Screen {
 
     fn build_header(state: ScreenState) -> tui::widgets::Tabs<'static> {
         match state {
-            ScreenState::LocalMenu(selected, _) => {
+            ScreenState::LocalMenu(_) => {
                 let titles = vec![
                     tui::text::Spans::from(tui::text::Span::raw("Local")),
                     tui::text::Spans::from(tui::text::Span::raw("Remote")),
@@ -77,13 +79,13 @@ impl Screen {
                             .fg(tui::style::Color::Green)
                             .add_modifier(tui::style::Modifier::BOLD),
                     )
-                    .select(selected.into())
+                    .select(0)
             }
         }
     }
 
     fn build_layout<B: tui::backend::Backend>(f: &mut tui::Frame<B>) -> Vec<tui::layout::Rect> {
-        return tui::layout::Layout::default()
+        let first_layer_layout = tui::layout::Layout::default()
             .direction(tui::layout::Direction::Vertical)
             .vertical_margin(1)
             .horizontal_margin(2)
@@ -95,5 +97,27 @@ impl Screen {
                 .as_ref(),
             )
             .split(f.size());
+        let header_layer = first_layer_layout[0];
+        let content_layer = first_layer_layout[1];
+        let second_layer_layout = tui::layout::Layout::default()
+            .direction(tui::layout::Direction::Horizontal)
+            .vertical_margin(1)
+            .constraints(
+                [
+                    tui::layout::Constraint::Percentage(25),
+                    tui::layout::Constraint::Percentage(50),
+                    tui::layout::Constraint::Percentage(25),
+                ]
+                .as_ref(),
+            )
+            .split(content_layer);
+        return vec![
+            header_layer,
+            second_layer_layout[0],
+            second_layer_layout[1],
+            second_layer_layout[2],
+        ];
     }
+
+    //fn build_main_panel_content(state: ScreenState) -> tui::widgets::List<'static> {}
 }
