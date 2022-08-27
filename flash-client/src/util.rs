@@ -1,5 +1,5 @@
 pub fn get_sub_directories(
-    parent_directory: &str,
+    parent_directory: &std::path::Path,
 ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let entries = std::fs::read_dir(parent_directory)?;
     return Ok(entries
