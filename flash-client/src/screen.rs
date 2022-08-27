@@ -2,7 +2,7 @@ use crate::util;
 #[derive(Clone)]
 pub enum ScreenState {
     //The field represents the state of the deck cursor
-    LocalMenu(tui::widgets::ListState),
+    LocalMenu(tui::widgets::ListState, Box<[String]>),
 }
 
 pub struct Screen {
@@ -26,18 +26,36 @@ impl Screen {
             crossterm::terminal::EnterAlternateScreen,
             crossterm::event::EnableMouseCapture
         )?;
+        match &self.state {
+            ScreenState::LocalMenu(list_state, _) => {
+                self.state = ScreenState::LocalMenu(
+                    list_state.to_owned(),
+                    Screen::get_current_decks().into_boxed_slice(),
+                )
+            }
+        }
         return Ok(());
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // match &self.state {
+        //     ScreenState::LocalMenu(list_state, decks) => {
+        //         let mut new_state = list_state.clone();
+        //         new_state.select(Some(1));
+        //         self.state = ScreenState::LocalMenu(new_state, decks.to_owned());
+        //     }
+        // }
         match self.state.clone() {
-            ScreenState::LocalMenu(mut list_state) => {
+            ScreenState::LocalMenu(mut list_state, current_decks) => {
                 self.terminal_mut().draw(|f| {
                     let container = Screen::build_layout(f);
-                    let header = Screen::build_header(&ScreenState::LocalMenu(list_state.clone()));
+                    let header = Screen::build_header(&ScreenState::LocalMenu(
+                        list_state.clone(),
+                        Vec::new().into_boxed_slice(),
+                    ));
                     f.render_widget(header, container[0]);
                     let middle_panel_content = Screen::build_main_panel_content(
-                        &ScreenState::LocalMenu(list_state.clone()),
+                        &ScreenState::LocalMenu(list_state.clone(), current_decks),
                     );
                     f.render_stateful_widget(middle_panel_content, container[2], &mut list_state);
                 })?;
@@ -67,7 +85,7 @@ impl Screen {
 
     fn build_header(state: &ScreenState) -> tui::widgets::Tabs<'static> {
         match state {
-            ScreenState::LocalMenu(_) => {
+            ScreenState::LocalMenu(..) => {
                 let titles = vec![
                     tui::text::Spans::from(tui::text::Span::raw("Local")),
                     tui::text::Spans::from(tui::text::Span::raw("Remote")),
@@ -127,19 +145,8 @@ impl Screen {
 
     fn build_main_panel_content(state: &ScreenState) -> tui::widgets::List<'static> {
         match state {
-            ScreenState::LocalMenu(_) => {
-                //This implementation is super costly and honestly should only be called if any directories/decks are added.
-                //Might be a good idea to add a metadata file to the local directory that can hold this information to make it so it only needs updating when a new deck is added.
-                //Additionally need to look into a way to have the vector persist. Might consider adding it to the screen struct? More thought needs to go into this.
-                let mut cur_dir =
-                    std::env::current_exe().expect("Could not find path to executable.");
-                cur_dir.pop();
-                cur_dir.push("decks");
-                cur_dir.push("local/");
-                let mut list_items_str = util::get_sub_directories(cur_dir.as_path())
-                    .expect("Failed to read directories.");
-                list_items_str.sort();
-                let list_items: Vec<tui::widgets::ListItem> = list_items_str
+            ScreenState::LocalMenu(_, current_decks) => {
+                let list_items: Vec<tui::widgets::ListItem> = current_decks
                     .iter()
                     .map(|x| tui::widgets::ListItem::new(x.to_owned()))
                     .collect();
@@ -153,5 +160,15 @@ impl Screen {
                     );
             }
         }
+    }
+    fn get_current_decks() -> Vec<String> {
+        let mut cur_dir = std::env::current_exe().expect("Could not find path to executable.");
+        cur_dir.pop();
+        cur_dir.push("decks");
+        cur_dir.push("local/");
+        let mut list_items_str =
+            util::get_sub_directories(cur_dir.as_path()).expect("Failed to read directories.");
+        list_items_str.sort();
+        list_items_str
     }
 }
