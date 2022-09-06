@@ -3,10 +3,9 @@ mod screen;
 mod util;
 
 fn main() -> Result<(), std::io::Error> {
-    let mut menu_state = tui::widgets::ListState::default();
-    menu_state.select(Some(0));
     let mut screen = screen::Screen::new(screen::ScreenState::LocalMenu(
-        menu_state,
+        tui::widgets::ListState::default(),
+        Vec::new().into_boxed_slice(),
         Vec::new().into_boxed_slice(),
     ))
     .expect("Terminal could not be created.");

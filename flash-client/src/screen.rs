@@ -2,7 +2,11 @@ use crate::util;
 #[derive(Clone)]
 pub enum ScreenState {
     //The field represents the state of the deck cursor
-    LocalMenu(tui::widgets::ListState, Box<[String]>),
+    LocalMenu(
+        tui::widgets::ListState,
+        Box<[String]>,
+        Box<[tui::layout::Rect]>,
+    ),
 }
 
 pub struct Screen {
@@ -26,11 +30,14 @@ impl Screen {
             crossterm::terminal::EnterAlternateScreen,
             crossterm::event::EnableMouseCapture
         )?;
-        match &self.state {
-            ScreenState::LocalMenu(list_state, _) => {
+        match self.get_state() {
+            ScreenState::LocalMenu(..) => {
+                let mut list_state = tui::widgets::ListState::default();
+                list_state.select(Some(0));
                 self.state = ScreenState::LocalMenu(
-                    list_state.to_owned(),
+                    list_state,
                     Screen::get_current_decks().into_boxed_slice(),
+                    Screen::build_layout(&mut self.terminal_mut().get_frame()).into_boxed_slice(),
                 )
             }
         }
@@ -38,29 +45,17 @@ impl Screen {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // match &self.state {
-        //     ScreenState::LocalMenu(list_state, decks) => {
-        //         let mut new_state = list_state.clone();
-        //         new_state.select(Some(1));
-        //         self.state = ScreenState::LocalMenu(new_state, decks.to_owned());
-        //     }
-        // }
-        match self.state.clone() {
-            ScreenState::LocalMenu(mut list_state, current_decks) => {
-                self.terminal_mut().draw(|f| {
-                    let container = Screen::build_layout(f);
-                    let header = Screen::build_header(&ScreenState::LocalMenu(
-                        list_state.clone(),
-                        Vec::new().into_boxed_slice(),
-                    ));
-                    f.render_widget(header, container[0]);
-                    let middle_panel_content = Screen::build_main_panel_content(
-                        &ScreenState::LocalMenu(list_state.clone(), current_decks),
-                    );
-                    f.render_stateful_widget(middle_panel_content, container[2], &mut list_state);
-                })?;
-            }
-        }
+        // Gets the approriate references, builds content for the screen, clears screen, then draws to stdout.
+        let (mut terminal, mut state) = self.get_screen_tuple();
+        let header = Screen::build_header(state);
+        let middle_panel_content = Screen::build_main_panel_content(state);
+        terminal.clear()?;
+        match state {
+            ScreenState::LocalMenu(list_state, _, content_regions) => terminal.draw(|f| {
+                f.render_widget(header, content_regions[0]);
+                f.render_stateful_widget(middle_panel_content, content_regions[2], list_state);
+            })?,
+        };
 
         std::thread::sleep(std::time::Duration::from_millis(10000));
         Ok(())
@@ -77,10 +72,27 @@ impl Screen {
         Ok(())
     }
 
+    fn get_screen_tuple(
+        &mut self,
+    ) -> (
+        &mut tui::Terminal<tui::backend::CrosstermBackend<std::io::Stdout>>,
+        &mut ScreenState,
+    ) {
+        return (&mut self.terminal, &mut self.state);
+    }
+
     fn terminal_mut(
         &mut self,
     ) -> &mut tui::terminal::Terminal<tui::backend::CrosstermBackend<std::io::Stdout>> {
         return &mut self.terminal;
+    }
+
+    fn get_state_mut(&mut self) -> &mut ScreenState {
+        return &mut self.state;
+    }
+
+    fn get_state(&self) -> &ScreenState {
+        return &self.state;
     }
 
     fn build_header(state: &ScreenState) -> tui::widgets::Tabs<'static> {
@@ -145,7 +157,7 @@ impl Screen {
 
     fn build_main_panel_content(state: &ScreenState) -> tui::widgets::List<'static> {
         match state {
-            ScreenState::LocalMenu(_, current_decks) => {
+            ScreenState::LocalMenu(_, current_decks, _) => {
                 let list_items: Vec<tui::widgets::ListItem> = current_decks
                     .iter()
                     .map(|x| tui::widgets::ListItem::new(x.to_owned()))
