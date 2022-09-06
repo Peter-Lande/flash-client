@@ -46,7 +46,7 @@ impl Screen {
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // Gets the approriate references, builds content for the screen, clears screen, then draws to stdout.
-        let (mut terminal, mut state) = self.get_screen_tuple();
+        let (terminal, state) = self.get_screen_tuple();
         let header = Screen::build_header(state);
         let middle_panel_content = Screen::build_main_panel_content(state);
         terminal.clear()?;
