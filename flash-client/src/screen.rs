@@ -17,7 +17,7 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Span, Spans},
-    widgets::{Block, Borders, List, ListItem, ListState, Tabs},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
     Terminal,
 };
 
@@ -69,11 +69,15 @@ impl Screen {
             if poll(Duration::from_millis(200))? {
                 if let Event::Key(key) = read()? {
                     match key.code {
-                        KeyCode::Esc => break,
+                        KeyCode::Char('q') => break,
                         KeyCode::Down => match &*initial_state {
                             ScreenState::LocalMenu(list_state, decks, content_regions) => {
-                                let new_state =
-                                    util::offset_state(&list_state.borrow(), 1, true, decks.len());
+                                let new_state = util::offset_state(
+                                    &list_state.borrow(),
+                                    1,
+                                    true,
+                                    decks.len() - 1,
+                                );
                                 self.state = Rc::new(ScreenState::LocalMenu(
                                     RefCell::new(new_state),
                                     decks.to_owned(),
@@ -83,8 +87,12 @@ impl Screen {
                         },
                         KeyCode::Up => match &*initial_state {
                             ScreenState::LocalMenu(list_state, decks, content_regions) => {
-                                let new_state =
-                                    util::offset_state(&list_state.borrow(), 1, false, decks.len());
+                                let new_state = util::offset_state(
+                                    &list_state.borrow(),
+                                    1,
+                                    false,
+                                    decks.len() - 1,
+                                );
                                 self.state = Rc::new(ScreenState::LocalMenu(
                                     RefCell::new(new_state),
                                     decks.to_owned(),
@@ -162,10 +170,20 @@ impl Screen {
         }
     }
 
-    fn build_footer(state: Rc<ScreenState>) -> Block<'static> {
-        match *state {
-            ScreenState::LocalMenu(..) => {
-                return Block::default().borders(Borders::TOP | Borders::BOTTOM)
+    fn build_footer(state: Rc<ScreenState>) -> Paragraph<'static> {
+        match &*state.clone() {
+            ScreenState::LocalMenu(list_state, decks, _) => {
+                let text = vec![Spans::from(vec![
+                    Span::raw("Selected '"),
+                    Span::raw(decks[list_state.borrow().selected().unwrap()].clone()),
+                    Span::raw("' "),
+                    Span::raw("Navigate("),
+                    Span::raw("↑/↓) "),
+                    Span::raw("(q)uit"),
+                ])];
+                return Paragraph::new(text)
+                    .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                    .alignment(Alignment::Left);
             }
         }
     }
@@ -177,9 +195,9 @@ impl Screen {
             .horizontal_margin(2)
             .constraints(
                 [
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(70),
-                    Constraint::Percentage(10),
+                    Constraint::Length(3),
+                    Constraint::Min(0),
+                    Constraint::Length(3),
                 ]
                 .as_ref(),
             )
@@ -214,7 +232,6 @@ impl Screen {
                     .iter()
                     .map(|x| ListItem::new(x.to_owned()))
                     .collect();
-                list_items.push(ListItem::new(String::from("Add new deck...")));
                 return List::new(list_items)
                     .block(Block::default().borders(Borders::ALL))
                     .style(Style::default().fg(Color::White))
@@ -230,6 +247,7 @@ impl Screen {
         let mut list_items_str =
             util::get_sub_directories(cur_dir.as_path()).expect("Failed to read directories.");
         list_items_str.sort();
+        list_items_str.push(String::from("Add new deck..."));
         list_items_str
     }
 }
