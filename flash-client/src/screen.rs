@@ -45,19 +45,49 @@ impl Screen {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        // Gets the approriate references, builds content for the screen, clears screen, then draws to stdout.
-        let (terminal, state) = self.get_screen_tuple();
-        let header = Screen::build_header(state);
-        let middle_panel_content = Screen::build_main_panel_content(state);
-        terminal.clear()?;
-        match state {
-            ScreenState::LocalMenu(list_state, _, content_regions) => terminal.draw(|f| {
-                f.render_widget(header, content_regions[0]);
-                f.render_stateful_widget(middle_panel_content, content_regions[2], list_state);
-            })?,
-        };
-
-        std::thread::sleep(std::time::Duration::from_millis(10000));
+        loop {
+            let initial_state = self.get_state();
+            if crossterm::event::poll(std::time::Duration::from_millis(200))? {
+                if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
+                    match key.code {
+                        crossterm::event::KeyCode::Esc => break,
+                        crossterm::event::KeyCode::Down => match initial_state {
+                            ScreenState::LocalMenu(list_state, decks, content_regions) => {
+                                let new_state =
+                                    util::offset_state(list_state, 1, true, decks.len());
+                                self.state = ScreenState::LocalMenu(
+                                    new_state,
+                                    decks.to_owned(),
+                                    content_regions.to_owned(),
+                                );
+                            }
+                        },
+                        crossterm::event::KeyCode::Up => match initial_state {
+                            ScreenState::LocalMenu(list_state, decks, content_regions) => {
+                                let new_state =
+                                    util::offset_state(list_state, 1, false, decks.len());
+                                self.state = ScreenState::LocalMenu(
+                                    new_state,
+                                    decks.to_owned(),
+                                    content_regions.to_owned(),
+                                );
+                            }
+                        },
+                        _ => (),
+                    }
+                }
+            }
+            // Gets the approriate references, builds content for the screen, clears screen, then draws to stdout.
+            let (terminal, state) = self.get_screen_tuple();
+            let header = Screen::build_header(state);
+            let middle_panel_content = Screen::build_main_panel_content(state);
+            match state {
+                ScreenState::LocalMenu(list_state, _, content_regions) => terminal.draw(|f| {
+                    f.render_widget(header, content_regions[0]);
+                    f.render_stateful_widget(middle_panel_content, content_regions[2], list_state);
+                })?,
+            };
+        }
         Ok(())
     }
 
@@ -158,10 +188,11 @@ impl Screen {
     fn build_main_panel_content(state: &ScreenState) -> tui::widgets::List<'static> {
         match state {
             ScreenState::LocalMenu(_, current_decks, _) => {
-                let list_items: Vec<tui::widgets::ListItem> = current_decks
+                let mut list_items: Vec<tui::widgets::ListItem> = current_decks
                     .iter()
                     .map(|x| tui::widgets::ListItem::new(x.to_owned()))
                     .collect();
+                list_items.push(tui::widgets::ListItem::new(String::from("Add new deck...")));
                 return tui::widgets::List::new(list_items)
                     .block(tui::widgets::Block::default().borders(tui::widgets::Borders::ALL))
                     .style(tui::style::Style::default().fg(tui::style::Color::White))

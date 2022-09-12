@@ -19,3 +19,26 @@ pub fn get_sub_directories(
         .filter(|x| !x.is_empty())
         .collect());
 }
+//If direction is True, then we add the offset to the state. If direction is False, we remove the offset from the state.
+pub fn offset_state(
+    initial_state: &tui::widgets::ListState,
+    offset: usize,
+    direction: bool,
+    max: usize,
+) -> tui::widgets::ListState {
+    let mut new_state = initial_state.to_owned();
+    new_state.select(
+        initial_state
+            .selected()
+            .zip(Some(offset))
+            .map(|(x, y)| {
+                if direction {
+                    return x.checked_add(y).unwrap_or_default();
+                } else {
+                    return x.checked_sub(y).unwrap_or_default();
+                }
+            })
+            .map(|x| std::cmp::min(x, max)),
+    );
+    return new_state;
+}
