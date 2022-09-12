@@ -1,10 +1,15 @@
+use std::{cell::RefCell, io::Error};
+
+use screen::{Screen, ScreenState};
+use tui::widgets::ListState;
+
 mod card;
 mod screen;
 mod util;
 
-fn main() -> Result<(), std::io::Error> {
-    let mut screen = screen::Screen::new(screen::ScreenState::LocalMenu(
-        tui::widgets::ListState::default(),
+fn main() -> Result<(), Error> {
+    let mut screen = Screen::new(ScreenState::LocalMenu(
+        RefCell::new(ListState::default()),
         Vec::new().into_boxed_slice(),
         Vec::new().into_boxed_slice(),
     ))
