@@ -102,7 +102,7 @@ impl Screen {
                         );
                     }
                 })?,
-                _ => terminal.draw(|f| {})?,
+                _ => terminal.draw(|_f| {})?,
             };
         }
         disable_raw_mode()?;
