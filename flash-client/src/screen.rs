@@ -17,8 +17,8 @@ use tui::{
 use crate::util;
 #[derive(Clone)]
 pub enum ScreenState {
-    //The field represents the state of the deck cursor
     LocalMenu,
+    DeckViewer,
 }
 
 pub struct Screen {
@@ -62,6 +62,7 @@ impl Screen {
                                 );
                                 self.local_menu_state = Rc::new(RefCell::new(new_state));
                             }
+                            _ => (),
                         },
                         KeyCode::Up => match *initial_state {
                             ScreenState::LocalMenu => {
@@ -73,6 +74,7 @@ impl Screen {
                                 );
                                 self.local_menu_state = Rc::new(RefCell::new(new_state));
                             }
+                            _ => (),
                         },
                         _ => (),
                     }
@@ -80,20 +82,27 @@ impl Screen {
             }
             // Gets the approriate references, builds content for the screen, then draws to stdout.
             let header = self.build_header();
-            let middle_panel_content = self.build_main_panel_content();
+            let menu_middle_panel_content = self.build_menu_middle_panel_content();
             let footer = self.build_footer();
             let menu_layout = Screen::build_layout(&mut terminal.get_frame());
             match *self.state.clone() {
                 ScreenState::LocalMenu => terminal.draw(|f| {
-                    f.render_widget(header, menu_layout[0]);
-                    f.render_widget(footer, menu_layout[4]);
-                    f.render_stateful_widget(
-                        middle_panel_content,
-                        menu_layout[2],
-                        //I know this is improper but its the only way to make it work...
-                        &mut (*self.local_menu_state).borrow_mut(),
-                    );
+                    if let Some(content) = header {
+                        f.render_widget(content, menu_layout[0]);
+                    }
+                    if let Some(content) = footer {
+                        f.render_widget(content, menu_layout[4]);
+                    }
+                    if let Some(content) = menu_middle_panel_content {
+                        f.render_stateful_widget(
+                            content,
+                            menu_layout[2],
+                            //I know this is improper but its the only way to make it work...
+                            &mut (*self.local_menu_state).borrow_mut(),
+                        );
+                    }
                 })?,
+                _ => terminal.draw(|f| {})?,
             };
         }
         disable_raw_mode()?;
@@ -106,32 +115,35 @@ impl Screen {
         Ok(())
     }
 
-    fn build_header(&self) -> Tabs<'static> {
+    fn build_header(&self) -> Option<Tabs<'static>> {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
                 let titles = vec![
                     Spans::from(Span::raw("Local")),
                     Spans::from(Span::raw("Remote")),
                 ];
-                Tabs::new(titles)
-                    .block(
-                        Block::default()
-                            .title(" Flash ")
-                            .borders(Borders::TOP | Borders::BOTTOM)
-                            .title_alignment(Alignment::Center),
-                    )
-                    .style(Style::default().fg(Color::White))
-                    .highlight_style(
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    )
-                    .select(0)
+                Some(
+                    Tabs::new(titles)
+                        .block(
+                            Block::default()
+                                .title(" Flash ")
+                                .borders(Borders::TOP | Borders::BOTTOM)
+                                .title_alignment(Alignment::Center),
+                        )
+                        .style(Style::default().fg(Color::White))
+                        .highlight_style(
+                            Style::default()
+                                .fg(Color::Green)
+                                .add_modifier(Modifier::BOLD),
+                        )
+                        .select(0),
+                )
             }
+            _ => None,
         }
     }
 
-    fn build_footer(&self) -> Paragraph<'static> {
+    fn build_footer(&self) -> Option<Paragraph<'static>> {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
                 let text = vec![Spans::from(vec![
@@ -143,12 +155,16 @@ impl Screen {
                     Span::raw("' "),
                     Span::raw("Navigate("),
                     Span::raw("↑/↓) "),
+                    Span::raw("(o)pen "),
                     Span::raw("(q)uit"),
                 ])];
-                return Paragraph::new(text)
-                    .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
-                    .alignment(Alignment::Left);
+                return Some(
+                    Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left),
+                );
             }
+            _ => None,
         }
     }
 
@@ -189,7 +205,7 @@ impl Screen {
         ];
     }
 
-    fn build_main_panel_content(&self) -> List<'static> {
+    fn build_menu_middle_panel_content(&self) -> Option<List<'static>> {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
                 let list_items: Vec<ListItem> = self
@@ -197,11 +213,14 @@ impl Screen {
                     .iter()
                     .map(|x| ListItem::new(x.to_owned()))
                     .collect();
-                return List::new(list_items)
-                    .block(Block::default().borders(Borders::ALL))
-                    .style(Style::default().fg(Color::White))
-                    .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
+                return Some(
+                    List::new(list_items)
+                        .block(Block::default().borders(Borders::ALL))
+                        .style(Style::default().fg(Color::White))
+                        .highlight_style(Style::default().bg(Color::White).fg(Color::Black)),
+                );
             }
+            _ => None,
         }
     }
     fn get_current_local_decks() -> Vec<String> {
