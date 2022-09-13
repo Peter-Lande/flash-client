@@ -24,7 +24,7 @@ pub enum ScreenState {
 pub struct Screen {
     state: Rc<ScreenState>,
     local_menu_state: Rc<RefCell<ListState>>,
-    local_decks: Box<[String]>,
+    local_decks_names: Box<[String]>,
 }
 
 impl Screen {
@@ -34,7 +34,7 @@ impl Screen {
         return Ok(Screen {
             state: Rc::new(state),
             local_menu_state: Rc::new(RefCell::new(list_state)),
-            local_decks: Screen::get_current_local_decks().into_boxed_slice(),
+            local_decks_names: Screen::get_current_local_decks().into_boxed_slice(),
         });
     }
 
@@ -58,7 +58,7 @@ impl Screen {
                                     &self.local_menu_state.clone().borrow(),
                                     1,
                                     true,
-                                    self.local_decks.len() - 1,
+                                    self.local_decks_names.len() - 1,
                                 );
                                 self.local_menu_state = Rc::new(RefCell::new(new_state));
                             }
@@ -69,7 +69,7 @@ impl Screen {
                                     &self.local_menu_state.clone().borrow(),
                                     1,
                                     false,
-                                    self.local_decks.len() - 1,
+                                    self.local_decks_names.len() - 1,
                                 );
                                 self.local_menu_state = Rc::new(RefCell::new(new_state));
                             }
@@ -137,7 +137,7 @@ impl Screen {
                 let text = vec![Spans::from(vec![
                     Span::raw("Selected '"),
                     Span::raw(
-                        self.local_decks[self.local_menu_state.borrow().selected().unwrap()]
+                        self.local_decks_names[self.local_menu_state.borrow().selected().unwrap()]
                             .clone(),
                     ),
                     Span::raw("' "),
@@ -192,8 +192,8 @@ impl Screen {
     fn build_main_panel_content(&self) -> List<'static> {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
-                let mut list_items: Vec<ListItem> = self
-                    .local_decks
+                let list_items: Vec<ListItem> = self
+                    .local_decks_names
                     .iter()
                     .map(|x| ListItem::new(x.to_owned()))
                     .collect();
