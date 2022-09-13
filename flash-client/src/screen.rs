@@ -1,11 +1,4 @@
-use std::{
-    cell::RefCell,
-    env::current_exe,
-    error::Error,
-    io::{stdout, Stdout},
-    rc::Rc,
-    time::Duration,
-};
+use std::{cell::RefCell, env::current_exe, error::Error, io::stdout, rc::Rc, time::Duration};
 
 use crossterm::{
     event::{poll, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -25,79 +18,60 @@ use crate::util;
 #[derive(Clone)]
 pub enum ScreenState {
     //The field represents the state of the deck cursor
-    LocalMenu(RefCell<ListState>, Box<[String]>, Box<[Rect]>),
+    LocalMenu,
 }
 
 pub struct Screen {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
     state: Rc<ScreenState>,
+    local_menu_state: Rc<RefCell<ListState>>,
+    local_decks: Box<[String]>,
 }
 
 impl Screen {
     pub fn new(state: ScreenState) -> Result<Self, Box<dyn Error>> {
-        let temp_term = Terminal::new(CrosstermBackend::new(stdout()))?;
+        let mut list_state = ListState::default();
+        list_state.select(Some(0));
         return Ok(Screen {
-            terminal: temp_term,
             state: Rc::new(state),
+            local_menu_state: Rc::new(RefCell::new(list_state)),
+            local_decks: Screen::get_current_local_decks().into_boxed_slice(),
         });
     }
 
-    pub fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
         enable_raw_mode()?;
         execute!(
-            self.terminal_mut().backend_mut(),
+            terminal.backend_mut(),
             EnterAlternateScreen,
             EnableMouseCapture
         )?;
-        match *self.get_state() {
-            ScreenState::LocalMenu(..) => {
-                let mut list_state = ListState::default();
-                list_state.select(Some(0));
-                self.state = Rc::new(ScreenState::LocalMenu(
-                    RefCell::new(list_state),
-                    Screen::get_current_local_decks().into_boxed_slice(),
-                    Screen::build_layout(&mut self.terminal_mut().get_frame()).into_boxed_slice(),
-                ))
-            }
-        }
-        return Ok(());
-    }
-
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
-            let initial_state = self.get_state();
+            let initial_state = self.state.clone();
             if poll(Duration::from_millis(200))? {
                 if let Event::Key(key) = read()? {
                     match key.code {
                         KeyCode::Char('q') => break,
-                        KeyCode::Down => match &*initial_state {
-                            ScreenState::LocalMenu(list_state, decks, content_regions) => {
+                        KeyCode::Down => match *initial_state {
+                            ScreenState::LocalMenu => {
                                 let new_state = util::offset_state(
-                                    &list_state.borrow(),
+                                    &self.local_menu_state.clone().borrow(),
                                     1,
                                     true,
-                                    decks.len() - 1,
+                                    self.local_decks.len() - 1,
                                 );
-                                self.state = Rc::new(ScreenState::LocalMenu(
-                                    RefCell::new(new_state),
-                                    decks.to_owned(),
-                                    content_regions.to_owned(),
-                                ));
+                                self.local_menu_state = Rc::new(RefCell::new(new_state));
                             }
                         },
-                        KeyCode::Up => match &*initial_state {
-                            ScreenState::LocalMenu(list_state, decks, content_regions) => {
+                        KeyCode::Up => match *initial_state {
+                            ScreenState::LocalMenu => {
                                 let new_state = util::offset_state(
-                                    &list_state.borrow(),
+                                    &self.local_menu_state.clone().borrow(),
                                     1,
                                     false,
-                                    decks.len() - 1,
+                                    self.local_decks.len() - 1,
                                 );
-                                self.state = Rc::new(ScreenState::LocalMenu(
-                                    RefCell::new(new_state),
-                                    decks.to_owned(),
-                                    content_regions.to_owned(),
-                                ));
+                                self.local_menu_state = Rc::new(RefCell::new(new_state));
                             }
                         },
                         _ => (),
@@ -105,49 +79,36 @@ impl Screen {
                 }
             }
             // Gets the approriate references, builds content for the screen, then draws to stdout.
-            let state = self.get_state();
-            let terminal = self.terminal_mut();
-            let header = Screen::build_header(state.clone());
-            let middle_panel_content = Screen::build_main_panel_content(state.clone());
-            let footer = Screen::build_footer(state.clone());
-            match &*state {
-                ScreenState::LocalMenu(list_state, _, content_regions) => terminal.draw(|f| {
-                    f.render_widget(header, content_regions[0]);
-                    f.render_widget(footer, content_regions[4]);
+            let header = self.build_header();
+            let middle_panel_content = self.build_main_panel_content();
+            let footer = self.build_footer();
+            let menu_layout = Screen::build_layout(&mut terminal.get_frame());
+            match *self.state.clone() {
+                ScreenState::LocalMenu => terminal.draw(|f| {
+                    f.render_widget(header, menu_layout[0]);
+                    f.render_widget(footer, menu_layout[4]);
                     f.render_stateful_widget(
                         middle_panel_content,
-                        content_regions[2],
+                        menu_layout[2],
                         //I know this is improper but its the only way to make it work...
-                        &mut *list_state.borrow_mut(),
+                        &mut (*self.local_menu_state).borrow_mut(),
                     );
                 })?,
             };
         }
-        Ok(())
-    }
-
-    pub fn exit(&mut self) -> Result<(), Box<dyn Error>> {
         disable_raw_mode()?;
         execute!(
-            self.terminal_mut().backend_mut(),
+            terminal.backend_mut(),
             LeaveAlternateScreen,
             DisableMouseCapture
         )?;
-        self.terminal_mut().show_cursor()?;
+        terminal.show_cursor()?;
         Ok(())
     }
 
-    fn terminal_mut(&mut self) -> &mut Terminal<CrosstermBackend<Stdout>> {
-        return &mut self.terminal;
-    }
-
-    fn get_state(&self) -> Rc<ScreenState> {
-        return self.state.clone();
-    }
-
-    fn build_header(state: Rc<ScreenState>) -> Tabs<'static> {
-        match *state {
-            ScreenState::LocalMenu(..) => {
+    fn build_header(&self) -> Tabs<'static> {
+        match *self.state.clone() {
+            ScreenState::LocalMenu => {
                 let titles = vec![
                     Spans::from(Span::raw("Local")),
                     Spans::from(Span::raw("Remote")),
@@ -170,12 +131,15 @@ impl Screen {
         }
     }
 
-    fn build_footer(state: Rc<ScreenState>) -> Paragraph<'static> {
-        match &*state.clone() {
-            ScreenState::LocalMenu(list_state, decks, _) => {
+    fn build_footer(&self) -> Paragraph<'static> {
+        match *self.state.clone() {
+            ScreenState::LocalMenu => {
                 let text = vec![Spans::from(vec![
                     Span::raw("Selected '"),
-                    Span::raw(decks[list_state.borrow().selected().unwrap()].clone()),
+                    Span::raw(
+                        self.local_decks[self.local_menu_state.borrow().selected().unwrap()]
+                            .clone(),
+                    ),
                     Span::raw("' "),
                     Span::raw("Navigate("),
                     Span::raw("↑/↓) "),
@@ -225,10 +189,11 @@ impl Screen {
         ];
     }
 
-    fn build_main_panel_content(state: Rc<ScreenState>) -> List<'static> {
-        match &*state.clone() {
-            ScreenState::LocalMenu(_, current_decks, _) => {
-                let mut list_items: Vec<ListItem> = current_decks
+    fn build_main_panel_content(&self) -> List<'static> {
+        match *self.state.clone() {
+            ScreenState::LocalMenu => {
+                let mut list_items: Vec<ListItem> = self
+                    .local_decks
                     .iter()
                     .map(|x| ListItem::new(x.to_owned()))
                     .collect();
