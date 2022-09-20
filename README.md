@@ -1,9 +1,13 @@
 # flash-client
 
- A CLI for making, using, and sharing flash cards.
+A TUI for making, using, and sharing flash cards.
 
- ### TODO
- 
-1. Create Deck struct that is a boxed slice of Card. 
-2. Implement the DeckViewer state to show the current deck one card at a time.
-3. Add ability to see parts of the card based on the state of the card (maybe a stateful widget?)
+## Usage
+To be written.
+
+## Features
+1. Easy to use UI that allows for navigating between decks
+2. Creation of new decks locally (planned)
+3. Editing of decks and cards (planned)
+4. Allows for studying decks and shuffling the deck based on memorization (in-progress)
+5. Access remote servers to download and share decks (planned)
