@@ -3,6 +3,7 @@ use std::io::Error;
 use screen::{Screen, ScreenState};
 
 mod card;
+mod deck;
 mod screen;
 mod util;
 

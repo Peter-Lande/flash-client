@@ -1,14 +1,14 @@
-pub fn get_sub_directories(
-    parent_directory: &std::path::Path,
-) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let entries = std::fs::read_dir(parent_directory)?;
+use std::{error::Error, ffi::OsString, fs::read_dir, path::Path};
+
+pub fn get_sub_directories(parent_directory: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+    let entries = read_dir(parent_directory)?;
     return Ok(entries
         .filter_map(|x| {
             x.map(|dir| {
                 if dir.path().is_dir() {
                     dir.file_name()
                         .into_string()
-                        .or::<std::ffi::OsString>(Ok(String::new()))
+                        .or::<OsString>(Ok(String::new()))
                         .unwrap()
                 } else {
                     return String::new();
