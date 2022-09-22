@@ -318,11 +318,9 @@ impl Screen {
                 f.render_widget(footer, *area);
             }
             ScreenState::DeckViewer => {
-                let text = vec![Spans::from(vec![
-                    Span::raw("Next Section/Next Card "),
-                    Span::raw("(←/→) "),
-                    Span::raw("(q)uit"),
-                ])];
+                let text = vec![Spans::from(vec![Span::raw(
+                    "Next Section/Next Card (←/→) Return to Menu (Esc) (q)uit",
+                )])];
                 let footer = Paragraph::new(text)
                     .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
                     .alignment(Alignment::Left);
