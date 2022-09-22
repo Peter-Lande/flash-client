@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs;
 use std::path::Path;
+use tui::layout::Alignment;
 use tui::text::Spans;
 use tui::widgets::{Block, Borders, Paragraph, Widget};
 
@@ -80,14 +81,16 @@ impl Card {
             return Paragraph::new(text).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(self.title.to_owned()),
+                    .title(self.title.to_owned())
+                    .title_alignment(Alignment::Center),
             );
         } else {
             let text = Spans::from("");
             return Paragraph::new(text).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(self.title.to_owned()),
+                    .title(self.title.to_owned())
+                    .title_alignment(Alignment::Center),
             );
         }
     }
