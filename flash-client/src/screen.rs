@@ -1,4 +1,12 @@
-use std::{cell::RefCell, env::current_exe, error::Error, io::stdout, rc::Rc, time::Duration};
+use std::{
+    cell::RefCell,
+    env::current_exe,
+    error::Error,
+    io::{stdout, Stdout},
+    path::PathBuf,
+    rc::Rc,
+    time::Duration,
+};
 
 use crossterm::{
     event::{poll, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -14,17 +22,19 @@ use tui::{
     Terminal,
 };
 
-use crate::util;
+use crate::{deck::Deck, util};
 #[derive(Clone)]
 pub enum ScreenState {
     LocalMenu,
     DeckViewer,
+    EditMode,
 }
 
 pub struct Screen {
     state: Rc<ScreenState>,
     local_menu_state: Rc<RefCell<ListState>>,
     local_decks_names: Box<[String]>,
+    current_deck: Rc<RefCell<Deck>>,
 }
 
 impl Screen {
@@ -35,6 +45,7 @@ impl Screen {
             state: Rc::new(state),
             local_menu_state: Rc::new(RefCell::new(list_state)),
             local_decks_names: Screen::get_current_local_decks().into_boxed_slice(),
+            current_deck: Rc::new(RefCell::new(Deck::default())),
         });
     }
 
@@ -76,34 +87,42 @@ impl Screen {
                             }
                             _ => (),
                         },
+                        KeyCode::Char('o') => match *initial_state {
+                            ScreenState::LocalMenu => {
+                                let mut cur_dir: PathBuf = match current_exe() {
+                                    Ok(mut exe_dir) => {
+                                        exe_dir.pop();
+                                        exe_dir
+                                    }
+                                    Err(_) => PathBuf::from(std::env::var("HOME").unwrap()),
+                                };
+                                cur_dir.push("decks");
+                                cur_dir.push("local");
+                                cur_dir.push(
+                                    &self.local_decks_names[self
+                                        .local_menu_state
+                                        .borrow()
+                                        .selected()
+                                        .unwrap_or_default()],
+                                );
+                                if let Ok(deck) = Deck::read_from_dir(&cur_dir) {
+                                    self.current_deck = Rc::new(RefCell::new(deck));
+                                    self.state = Rc::new(ScreenState::DeckViewer);
+                                }
+                            }
+                            _ => (),
+                        },
                         _ => (),
                     }
                 }
             }
-            // Gets the approriate references, builds content for the screen, then draws to stdout.
-            let header = self.build_header();
-            let menu_middle_panel_content = self.build_menu_middle_panel_content();
-            let footer = self.build_footer();
+            //First we find the areas of the screen we are drawing to, then we draw each part of the screen using the appropriate function.
             let menu_layout = Screen::build_layout(&mut terminal.get_frame());
-            match *self.state.clone() {
-                ScreenState::LocalMenu => terminal.draw(|f| {
-                    if let Some(content) = header {
-                        f.render_widget(content, menu_layout[0]);
-                    }
-                    if let Some(content) = footer {
-                        f.render_widget(content, menu_layout[4]);
-                    }
-                    if let Some(content) = menu_middle_panel_content {
-                        f.render_stateful_widget(
-                            content,
-                            menu_layout[2],
-                            //I know this is improper but its the only way to make it work...
-                            &mut (*self.local_menu_state).borrow_mut(),
-                        );
-                    }
-                })?,
-                _ => terminal.draw(|_f| {})?,
-            };
+            terminal.draw(|f| {
+                self.render_header(f, &menu_layout[0]);
+                self.render_footer(f, &menu_layout[4]);
+                self.render_middle_panel_content(f, &menu_layout[2]);
+            })?;
         }
         disable_raw_mode()?;
         execute!(
@@ -115,35 +134,55 @@ impl Screen {
         Ok(())
     }
 
-    fn build_header(&self) -> Option<Tabs<'static>> {
+    fn render_header(&self, f: &mut tui::Frame<CrosstermBackend<Stdout>>, area: &Rect) -> () {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
                 let titles = vec![
                     Spans::from(Span::raw("Local")),
                     Spans::from(Span::raw("Remote")),
                 ];
-                Some(
-                    Tabs::new(titles)
-                        .block(
-                            Block::default()
-                                .title(" Flash ")
-                                .borders(Borders::TOP | Borders::BOTTOM)
-                                .title_alignment(Alignment::Center),
-                        )
-                        .style(Style::default().fg(Color::White))
-                        .highlight_style(
-                            Style::default()
-                                .fg(Color::Green)
-                                .add_modifier(Modifier::BOLD),
-                        )
-                        .select(0),
-                )
+                let header = Tabs::new(titles)
+                    .block(
+                        Block::default()
+                            .title(" Flash ")
+                            .borders(Borders::TOP | Borders::BOTTOM)
+                            .title_alignment(Alignment::Center),
+                    )
+                    .style(Style::default().fg(Color::White))
+                    .highlight_style(
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    )
+                    .select(0);
+                f.render_widget(header, *area);
             }
-            _ => None,
-        }
+            ScreenState::DeckViewer => {
+                let titles = vec![
+                    Spans::from(Span::raw("Deck: ")),
+                    Spans::from(Span::raw(self.current_deck.borrow().deck_title.clone())),
+                    Spans::from(Span::raw(" Progress: ")),
+                    Spans::from(Span::raw(
+                        self.current_deck.borrow().cur_card.clone().to_string(),
+                    )),
+                    Spans::from(Span::raw("/")),
+                    Spans::from(Span::raw(self.current_deck.borrow().len().to_string())),
+                ];
+                let header = Paragraph::new(titles)
+                    .block(
+                        Block::default()
+                            .title(" Flash ")
+                            .borders(Borders::TOP | Borders::BOTTOM)
+                            .title_alignment(Alignment::Center),
+                    )
+                    .style(Style::default().fg(Color::White));
+                f.render_widget(header, *area);
+            }
+            _ => (),
+        };
     }
 
-    fn build_footer(&self) -> Option<Paragraph<'static>> {
+    fn render_footer(&self, f: &mut tui::Frame<CrosstermBackend<Stdout>>, area: &Rect) -> () {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
                 let text = vec![Spans::from(vec![
@@ -158,13 +197,22 @@ impl Screen {
                     Span::raw("(o)pen "),
                     Span::raw("(q)uit"),
                 ])];
-                return Some(
-                    Paragraph::new(text)
-                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
-                        .alignment(Alignment::Left),
-                );
+                let footer = Paragraph::new(text)
+                    .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                    .alignment(Alignment::Left);
+                f.render_widget(footer, *area);
             }
-            _ => None,
+            ScreenState::DeckViewer => {
+                let text = vec![Spans::from(vec![
+                    Span::raw("Flip Card/Next Card "),
+                    Span::raw("(←/→) "),
+                ])];
+                let footer = Paragraph::new(text)
+                    .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                    .alignment(Alignment::Left);
+                f.render_widget(footer, *area);
+            }
+            _ => (),
         }
     }
 
@@ -205,7 +253,11 @@ impl Screen {
         ];
     }
 
-    fn build_menu_middle_panel_content(&self) -> Option<List<'static>> {
+    fn render_middle_panel_content(
+        &self,
+        f: &mut tui::Frame<CrosstermBackend<Stdout>>,
+        area: &Rect,
+    ) -> () {
         match *self.state.clone() {
             ScreenState::LocalMenu => {
                 let list_items: Vec<ListItem> = self
@@ -213,16 +265,21 @@ impl Screen {
                     .iter()
                     .map(|x| ListItem::new(x.to_owned()))
                     .collect();
-                return Some(
-                    List::new(list_items)
-                        .block(Block::default().borders(Borders::ALL))
-                        .style(Style::default().fg(Color::White))
-                        .highlight_style(Style::default().bg(Color::White).fg(Color::Black)),
+                let middle_panel = List::new(list_items)
+                    .block(Block::default().borders(Borders::ALL))
+                    .style(Style::default().fg(Color::White))
+                    .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
+                //The state needs this weird configuration to work, sadly just how it is.
+                f.render_stateful_widget(
+                    middle_panel,
+                    *area,
+                    &mut (*self.local_menu_state).borrow_mut(),
                 );
             }
-            _ => None,
+            _ => (),
         }
     }
+
     fn get_current_local_decks() -> Vec<String> {
         let mut cur_dir = current_exe().expect("Could not find path to executable.");
         cur_dir.pop();

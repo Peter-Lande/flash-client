@@ -1,12 +1,12 @@
-use std::{error::Error, fs::read_dir, path::Path};
+use std::{fs::read_dir, path::Path};
 
 use crate::card::Card;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Deck {
-    deck_title: String,
+    pub deck_title: String,
     contents: Box<[Card]>,
-    cur_card: usize,
+    pub cur_card: usize,
 }
 
 impl Deck {
@@ -46,7 +46,13 @@ impl Deck {
                     return card_option;
                 })
                 .collect();
-            return Ok(Deck::new("", cards));
+            return Ok(Deck::new(
+                dirpath
+                    .file_stem()
+                    .and_then(|dir_name| dir_name.to_str())
+                    .unwrap_or("Unnamed"),
+                cards,
+            ));
         }
         return Err(String::from("Failed to read directory."));
     }
@@ -83,5 +89,8 @@ impl Deck {
         } else {
             return Some(self.cur_card);
         }
+    }
+    pub fn len(&self) -> usize {
+        return self.contents.len();
     }
 }
