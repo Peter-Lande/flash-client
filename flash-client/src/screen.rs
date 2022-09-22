@@ -3,6 +3,7 @@ use std::{
     cmp::min,
     env,
     error::Error,
+    fs,
     io::{stdout, Stdout},
     path::PathBuf,
     rc::Rc,
@@ -49,6 +50,7 @@ pub struct Screen {
     local_decks_names: Box<[String]>,
     current_deck: Rc<RefCell<Deck>>,
     edit_mode: bool,
+    edit_failed: bool,
     new_deck_name: Rc<String>,
     options: Rc<ScreenOptions>,
 }
@@ -71,6 +73,7 @@ impl Screen {
                         .into_boxed_slice(),
                     current_deck: Rc::new(RefCell::new(Deck::default())),
                     edit_mode: false,
+                    edit_failed: false,
                     new_deck_name: Rc::new(String::default()),
                     options: Rc::new(screen_options),
                 });
@@ -169,32 +172,59 @@ impl Screen {
                         }
                     } else {
                         match key.code {
-                            KeyCode::Char(typed_char) => {
-                                let mut current_name = (*self.new_deck_name).clone();
-                                current_name.push(typed_char);
-                                self.new_deck_name = Rc::new(current_name);
-                            }
-                            KeyCode::Enter => {
-                                if !self.new_deck_name.is_empty() {
-                                    let mut temp_vec = self.local_decks_names.to_vec();
-                                    temp_vec
-                                        .insert(temp_vec.len() - 1, self.new_deck_name.to_string());
-                                    self.local_decks_names = temp_vec.into_boxed_slice();
+                            KeyCode::Char(typed_char) => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    if self.edit_failed {
+                                        self.edit_failed = false;
+                                    }
+                                    let mut current_name = (*self.new_deck_name).clone();
+                                    current_name.push(typed_char);
+                                    self.new_deck_name = Rc::new(current_name);
                                 }
-                                self.new_deck_name = Rc::new(String::default());
-                                self.edit_mode = false;
-                                terminal.clear()?;
-                            }
-                            KeyCode::Esc => {
-                                self.new_deck_name = Rc::new(String::default());
-                                self.edit_mode = false;
-                                terminal.clear()?;
-                            }
-                            KeyCode::Backspace => {
-                                let mut current_name = (*self.new_deck_name).clone();
-                                current_name.pop();
-                                self.new_deck_name = Rc::new(current_name);
-                            }
+                                _ => (),
+                            },
+                            KeyCode::Enter => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    if !self.new_deck_name.is_empty() {
+                                        let mut new_dir = self.options.local_directory.clone();
+                                        new_dir.push(self.new_deck_name.to_string());
+                                        if let Ok(_) = fs::create_dir(new_dir) {
+                                            let mut temp_vec = self.local_decks_names.to_vec();
+                                            temp_vec.insert(
+                                                temp_vec.len() - 1,
+                                                self.new_deck_name.to_string(),
+                                            );
+                                            self.local_decks_names = temp_vec.into_boxed_slice();
+                                            self.new_deck_name = Rc::new(String::default());
+                                            self.edit_mode = false;
+                                            terminal.clear()?;
+                                        } else {
+                                            self.edit_failed = true;
+                                        }
+                                    } else {
+                                        self.new_deck_name = Rc::new(String::default());
+                                        self.edit_mode = false;
+                                        terminal.clear()?;
+                                    }
+                                }
+                                _ => (),
+                            },
+                            KeyCode::Esc => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    self.new_deck_name = Rc::new(String::default());
+                                    self.edit_mode = false;
+                                    terminal.clear()?;
+                                }
+                                _ => (),
+                            },
+                            KeyCode::Backspace => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    let mut current_name = (*self.new_deck_name).clone();
+                                    current_name.pop();
+                                    self.new_deck_name = Rc::new(current_name);
+                                }
+                                _ => (),
+                            },
                             _ => (),
                         }
                     }
@@ -378,12 +408,29 @@ impl Screen {
             ScreenState::LocalMenu => {
                 if self.edit_mode {
                     let text = vec![Spans::from((*self.new_deck_name).clone())];
+
                     let right_panel = Paragraph::new(text).block(
                         Block::default()
                             .borders(Borders::ALL)
                             .title(" New Deck Name "),
                     );
-                    f.render_widget(right_panel, *area);
+                    let right_panel_layout = Layout::default()
+                        .constraints(
+                            [
+                                Constraint::Percentage(20),
+                                Constraint::Percentage(20),
+                                Constraint::Percentage(60),
+                            ]
+                            .as_ref(),
+                        )
+                        .split(*area);
+                    f.render_widget(right_panel, right_panel_layout[0]);
+                    if self.edit_failed {
+                        let error_text = vec![Spans::from("Deck already exists.")];
+                        let right_panel_error = Paragraph::new(error_text)
+                            .block(Block::default().borders(Borders::ALL).title(" Error "));
+                        f.render_widget(right_panel_error, right_panel_layout[1]);
+                    }
                 }
             }
             _ => (),

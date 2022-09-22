@@ -63,10 +63,11 @@ impl Deck {
         if !self.contents.is_empty() {
             if let None = self.contents[self.cur_card].increment_section() {
                 if let Some(i) = self.cur_card.checked_add(1) {
-                    if self.cur_card > self.contents.len() {
-                        self.cur_card = self.contents.len();
+                    if i >= self.contents.len() {
+                        self.cur_card = self.contents.len() - 1;
                         return Some(self.cur_card);
                     } else {
+                        self.cur_card = i;
                         return Some(i);
                     }
                 } else {
@@ -84,10 +85,11 @@ impl Deck {
         if !self.contents.is_empty() {
             if let None = self.contents[self.cur_card].decrement_section() {
                 if let Some(i) = self.cur_card.checked_sub(1) {
-                    if self.cur_card > self.contents.len() {
-                        self.cur_card = self.contents.len();
+                    if i >= self.contents.len() {
+                        self.cur_card = self.contents.len() - 1;
                         return Some(self.cur_card);
                     } else {
+                        self.cur_card = i;
                         return Some(i);
                     }
                 } else {

@@ -53,7 +53,7 @@ impl Card {
         if let Some(i) = self.current_section.checked_add(1) {
             if i >= self.sections.len() {
                 self.current_section = self.sections.len() - 1;
-                return Some(self.current_section);
+                return None;
             }
             self.current_section = i;
             return Some(i);
