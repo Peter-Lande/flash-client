@@ -7,7 +7,8 @@ To be written.
 
 ## Features
 1. Easy to use UI that allows for navigating between decks
-2. Creation of new decks locally (planned)
-3. Editing of decks and cards (planned)
-4. Allows for studying decks and shuffling the deck based on memorization (in-progress)
+2. Allows for studying decks
+3. Creation of new decks locally (in-progress)
+4. Editing of decks and cards (planned)
+5. Shuffles decks based on how well you understand the content (planned)
 5. Access remote servers to download and share decks (planned)

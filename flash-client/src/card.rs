@@ -3,24 +3,16 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 use tui::text::Spans;
-use tui::widgets::{Block, Borders, Paragraph};
+use tui::widgets::{Block, Borders, Paragraph, Widget};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Card {
     title: String,
     sections: Vec<String>,
-    cur_section: usize,
+    current_section: usize,
 }
 
 impl Card {
-    pub fn new() -> Self {
-        return Card {
-            title: String::from(""),
-            sections: Vec::<String>::new(),
-            cur_section: 0,
-        };
-    }
-
     pub fn read_from_file(filepath: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let input_text = fs::read_to_string(filepath)?;
         let input_object: Result<Card, Box<dyn Error>> = serde_json::from_str(&input_text)
@@ -44,7 +36,7 @@ impl Card {
         return Card {
             title: title.to_owned(),
             sections: self.sections,
-            cur_section: self.cur_section,
+            current_section: self.current_section,
         };
     }
 
@@ -52,17 +44,17 @@ impl Card {
         return Card {
             title: self.title,
             sections: sections,
-            cur_section: self.cur_section,
+            current_section: self.current_section,
         };
     }
 
     pub fn increment_section(&mut self) -> Option<usize> {
-        if let Some(i) = self.cur_section.checked_add(1) {
-            if i > self.sections.len() {
-                self.cur_section = self.sections.len();
-                return None;
+        if let Some(i) = self.current_section.checked_add(1) {
+            if i >= self.sections.len() {
+                self.current_section = self.sections.len() - 1;
+                return Some(self.current_section);
             }
-            self.cur_section = i;
+            self.current_section = i;
             return Some(i);
         } else {
             return None;
@@ -70,24 +62,33 @@ impl Card {
     }
 
     pub fn decrement_section(&mut self) -> Option<usize> {
-        if let Some(i) = self.cur_section.checked_sub(1) {
+        if let Some(i) = self.current_section.checked_sub(1) {
             if i > self.sections.len() {
-                self.cur_section = self.sections.len();
+                self.current_section = self.sections.len();
                 return None;
             }
-            self.cur_section = i;
+            self.current_section = i;
             return Some(i);
         } else {
             return None;
         }
     }
 
-    pub fn as_widget(&self) -> Paragraph<'static> {
-        let text = Spans::from(self.sections[self.cur_section].to_owned());
-        return Paragraph::new(text).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(self.title.to_owned()),
-        );
+    pub fn as_widget(&self) -> impl Widget {
+        if !self.sections.is_empty() {
+            let text = Spans::from(self.sections[self.current_section].to_owned());
+            return Paragraph::new(text).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(self.title.to_owned()),
+            );
+        } else {
+            let text = Spans::from("");
+            return Paragraph::new(text).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(self.title.to_owned()),
+            );
+        }
     }
 }

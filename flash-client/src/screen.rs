@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    cmp::min,
     env::current_exe,
     error::Error,
     io::{stdout, Stdout},
@@ -27,7 +28,7 @@ use crate::{deck::Deck, util};
 pub enum ScreenState {
     LocalMenu,
     DeckViewer,
-    EditMode,
+    EditMode(Rc<ScreenState>),
 }
 
 pub struct Screen {
@@ -112,6 +113,25 @@ impl Screen {
                             }
                             _ => (),
                         },
+                        KeyCode::Right => match *initial_state {
+                            ScreenState::DeckViewer => {
+                                self.current_deck.borrow_mut().increment_deck();
+                            }
+                            _ => (),
+                        },
+                        KeyCode::Left => match *initial_state {
+                            ScreenState::DeckViewer => {
+                                self.current_deck.borrow_mut().decrement_deck();
+                            }
+                            _ => (),
+                        },
+                        KeyCode::Esc => match *initial_state {
+                            ScreenState::DeckViewer => {
+                                self.current_deck = Rc::new(RefCell::new(Deck::default()));
+                                self.state = Rc::new(ScreenState::LocalMenu);
+                            }
+                            _ => (),
+                        },
                         _ => (),
                     }
                 }
@@ -158,16 +178,20 @@ impl Screen {
                 f.render_widget(header, *area);
             }
             ScreenState::DeckViewer => {
-                let titles = vec![
-                    Spans::from(Span::raw("Deck: ")),
-                    Spans::from(Span::raw(self.current_deck.borrow().deck_title.clone())),
-                    Spans::from(Span::raw(" Progress: ")),
-                    Spans::from(Span::raw(
-                        self.current_deck.borrow().cur_card.clone().to_string(),
-                    )),
-                    Spans::from(Span::raw("/")),
-                    Spans::from(Span::raw(self.current_deck.borrow().len().to_string())),
-                ];
+                let titles = vec![Spans::from(vec![
+                    Span::raw("Deck: "),
+                    Span::raw(self.current_deck.borrow().deck_title.clone()),
+                    Span::raw(" Progress: "),
+                    Span::raw(
+                        (min(
+                            self.current_deck.borrow().cur_card.clone() + 1,
+                            self.current_deck.borrow().len(),
+                        ))
+                        .to_string(),
+                    ),
+                    Span::raw("/"),
+                    Span::raw((self.current_deck.borrow().len()).to_string()),
+                ])];
                 let header = Paragraph::new(titles)
                     .block(
                         Block::default()
@@ -204,8 +228,9 @@ impl Screen {
             }
             ScreenState::DeckViewer => {
                 let text = vec![Spans::from(vec![
-                    Span::raw("Flip Card/Next Card "),
+                    Span::raw("Next Section/Next Card "),
                     Span::raw("(←/→) "),
+                    Span::raw("(q)uit"),
                 ])];
                 let footer = Paragraph::new(text)
                     .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
@@ -275,6 +300,9 @@ impl Screen {
                     *area,
                     &mut (*self.local_menu_state).borrow_mut(),
                 );
+            }
+            ScreenState::DeckViewer => {
+                f.render_widget(self.current_deck.borrow().as_widget(), *area);
             }
             _ => (),
         }

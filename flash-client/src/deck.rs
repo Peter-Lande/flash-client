@@ -1,5 +1,7 @@
 use std::{fs::read_dir, path::Path};
 
+use tui::widgets::Widget;
+
 use crate::card::Card;
 
 #[derive(Clone, Debug, Default)]
@@ -58,39 +60,54 @@ impl Deck {
     }
 
     pub fn increment_deck(&mut self) -> Option<usize> {
-        if let None = self.contents[self.cur_card].increment_section() {
-            if let Some(i) = self.cur_card.checked_add(1) {
-                if self.cur_card > self.contents.len() {
-                    self.cur_card = self.contents.len();
-                    return Some(self.cur_card);
+        if !self.contents.is_empty() {
+            if let None = self.contents[self.cur_card].increment_section() {
+                if let Some(i) = self.cur_card.checked_add(1) {
+                    if self.cur_card > self.contents.len() {
+                        self.cur_card = self.contents.len();
+                        return Some(self.cur_card);
+                    } else {
+                        return Some(i);
+                    }
                 } else {
-                    return Some(i);
+                    return None;
                 }
             } else {
-                return None;
+                return Some(self.cur_card);
             }
         } else {
-            return Some(self.cur_card);
+            return Some(0);
         }
     }
 
     pub fn decrement_deck(&mut self) -> Option<usize> {
-        if let None = self.contents[self.cur_card].decrement_section() {
-            if let Some(i) = self.cur_card.checked_sub(1) {
-                if self.cur_card > self.contents.len() {
-                    self.cur_card = self.contents.len();
-                    return Some(self.cur_card);
+        if !self.contents.is_empty() {
+            if let None = self.contents[self.cur_card].decrement_section() {
+                if let Some(i) = self.cur_card.checked_sub(1) {
+                    if self.cur_card > self.contents.len() {
+                        self.cur_card = self.contents.len();
+                        return Some(self.cur_card);
+                    } else {
+                        return Some(i);
+                    }
                 } else {
-                    return Some(i);
+                    return None;
                 }
             } else {
-                return None;
+                return Some(self.cur_card);
             }
         } else {
-            return Some(self.cur_card);
+            return Some(0);
         }
     }
     pub fn len(&self) -> usize {
         return self.contents.len();
+    }
+    pub fn as_widget(&self) -> impl Widget {
+        if !self.contents.is_empty() {
+            return self.contents[self.cur_card].as_widget();
+        } else {
+            return Card::default().as_widget();
+        }
     }
 }
