@@ -1,5 +1,7 @@
 # flash-client
 
+[![](https://tokei.rs/b1/github/Peter-Lande/flash-client)](https://github.com/Peter-Lande/flash-client)
+
 A TUI for making, using, and sharing flash cards.
 
 ## Usage
