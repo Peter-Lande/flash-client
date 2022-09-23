@@ -9,6 +9,7 @@ To be written.
 1. Easy to use UI that allows for navigating between decks
 2. Allows for studying decks
 3. Creation of new decks locally 
-4. Editing of decks and cards (in-progress)
-5. Shuffles decks based on how well you understand the content (planned)
-5. Access remote servers to download and share decks (planned)
+4. Editing of decks
+5. Editing of cards (in-progress)
+6. Shuffles decks based on how well you understand the content (planned)
+7. Access remote servers to download and share decks (planned)

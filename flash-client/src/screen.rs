@@ -30,12 +30,13 @@ use crate::{deck::Deck, util};
 pub enum ScreenState {
     LocalMenu,
     DeckViewer,
+    DeckEditor,
 }
 
 #[derive(Clone)]
 pub enum EditMode {
     EditMenu(Rc<RefCell<ListState>>),
-    AddDeck,
+    AddItem,
     EditDeck,
     EditCard,
     None,
@@ -56,6 +57,7 @@ impl ScreenOptions {
 pub struct Screen {
     state: Rc<ScreenState>,
     local_menu_state: Rc<RefCell<ListState>>,
+    edit_menu_state: Rc<RefCell<ListState>>,
     local_decks_names: Box<[String]>,
     current_deck: Rc<RefCell<Deck>>,
     edit_mode: Rc<EditMode>,
@@ -66,8 +68,10 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(state: ScreenState) -> Result<Self, Box<dyn Error>> {
-        let mut list_state = ListState::default();
-        list_state.select(Some(0));
+        let mut local_list_state = ListState::default();
+        local_list_state.select(Some(0));
+        let mut edit_list_state = ListState::default();
+        edit_list_state.select(Some(0));
         let mut cur_dir = env::current_exe()?;
         cur_dir.pop();
         cur_dir.push("config.ini");
@@ -77,7 +81,8 @@ impl Screen {
                 let screen_options = ScreenOptions::new(local_path);
                 return Ok(Screen {
                     state: Rc::new(state),
-                    local_menu_state: Rc::new(RefCell::new(list_state)),
+                    local_menu_state: Rc::new(RefCell::new(local_list_state)),
+                    edit_menu_state: Rc::new(RefCell::new(edit_list_state)),
                     local_decks_names: Screen::get_current_local_decks(&screen_options)
                         .into_boxed_slice(),
                     current_deck: Rc::new(RefCell::new(Deck::default())),
@@ -150,7 +155,7 @@ impl Screen {
                                         .unwrap_or_default()
                                         == self.local_decks_names.len() - 1
                                     {
-                                        self.edit_mode = Rc::new(EditMode::AddDeck);
+                                        self.edit_mode = Rc::new(EditMode::AddItem);
                                     } else {
                                         let mut cur_dir: PathBuf =
                                             self.options.local_directory.clone();
@@ -217,6 +222,10 @@ impl Screen {
                                     self.edit_mode = Rc::new(EditMode::None);
                                     terminal.clear()?;
                                 }
+                                ScreenState::DeckEditor => {
+                                    self.edit_mode = Rc::new(EditMode::None);
+                                    terminal.clear()?;
+                                }
                                 _ => (),
                             },
                             KeyCode::Enter => match *initial_state {
@@ -233,15 +242,37 @@ impl Screen {
                                             }
                                             self.edit_mode = Rc::new(EditMode::EditDeck);
                                         } else {
-                                            self.edit_mode = Rc::new(EditMode::EditCard);
+                                            let mut cur_dir: PathBuf =
+                                                self.options.local_directory.clone();
+                                            cur_dir.push(
+                                                &self.local_decks_names[self
+                                                    .local_menu_state
+                                                    .borrow()
+                                                    .selected()
+                                                    .unwrap_or_default()],
+                                            );
+                                            if let Ok(deck) = Deck::read_from_dir(&cur_dir) {
+                                                self.current_deck = Rc::new(RefCell::new(deck));
+                                                self.state = Rc::new(ScreenState::DeckEditor);
+                                                self.edit_mode = Rc::new(EditMode::None);
+                                            }
                                         }
+                                    }
+                                }
+                                ScreenState::DeckEditor => {
+                                    //TODO: Add functionality to when we are editing a deck and select a card to edit.
+                                    //Current code does jack shit
+                                    if let Some(item_index) =
+                                        self.edit_menu_state.borrow().selected()
+                                    {
+                                        if item_index == self.current_deck.borrow().len() {}
                                     }
                                 }
                                 _ => (),
                             },
                             _ => (),
                         },
-                        EditMode::AddDeck => match key.code {
+                        EditMode::AddItem => match key.code {
                             KeyCode::Char(typed_char) => match *initial_state {
                                 ScreenState::LocalMenu => {
                                     if self.edit_failed {
@@ -437,6 +468,9 @@ impl Screen {
                     .style(Style::default().fg(Color::White));
                 f.render_widget(header, *area);
             }
+            ScreenState::DeckEditor => {
+                //TODO: Add header for when editing a deck.
+            }
         };
     }
 
@@ -475,6 +509,9 @@ impl Screen {
                     .alignment(Alignment::Left);
                 f.render_widget(footer, *area);
             }
+            ScreenState::DeckEditor => {
+                //TODO: Add footer for when editing deck
+            }
         }
     }
 
@@ -502,7 +539,25 @@ impl Screen {
                 );
             }
             ScreenState::DeckViewer => {
-                f.render_widget(self.current_deck.borrow().as_widget(), *area);
+                f.render_widget(self.current_deck.borrow().as_widget(), *area)
+            }
+            ScreenState::DeckEditor => {
+                let mut name_vec = self.current_deck.borrow().get_card_names();
+                name_vec.push(String::from("Add new card..."));
+                let list_items: Vec<ListItem> = name_vec
+                    .iter()
+                    .map(|name| ListItem::new(name.to_owned()))
+                    .collect();
+                let middle_panel = List::new(list_items)
+                    .block(Block::default().borders(Borders::ALL))
+                    .style(Style::default().fg(Color::White))
+                    .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
+                //The state needs this weird configuration to work, sadly just how it is.
+                f.render_stateful_widget(
+                    middle_panel,
+                    *area,
+                    &mut (*self.edit_menu_state).borrow_mut(),
+                );
             }
         }
     }
@@ -525,7 +580,7 @@ impl Screen {
                         .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
                     f.render_stateful_widget(right_panel, *area, &mut menu_state.borrow_mut())
                 }
-                EditMode::AddDeck => {
+                EditMode::AddItem => {
                     let text = vec![Spans::from((*self.new_deck_name).clone())];
 
                     let right_panel = Paragraph::new(text).block(
@@ -579,6 +634,9 @@ impl Screen {
                 }
                 _ => (),
             },
+            ScreenState::DeckEditor => {
+                //TODO: Add functionality for displaying editing cards.
+            }
             _ => (),
         }
     }

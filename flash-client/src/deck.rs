@@ -112,4 +112,14 @@ impl Deck {
             return Card::default().as_widget();
         }
     }
+
+    pub fn get_card_names(&self) -> Vec<String> {
+        let names = self
+            .contents
+            .to_vec()
+            .iter()
+            .map(|card| card.title.to_owned())
+            .collect();
+        names
+    }
 }

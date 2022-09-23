@@ -8,7 +8,7 @@ use tui::widgets::{Block, Borders, Paragraph, Widget};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Card {
-    title: String,
+    pub title: String,
     sections: Vec<String>,
     current_section: usize,
 }
