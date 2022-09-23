@@ -32,7 +32,9 @@ pub enum ScreenState {
     DeckViewer,
 }
 
+#[derive(Clone)]
 pub enum EditMode {
+    EditMenu(Rc<RefCell<ListState>>),
     AddDeck,
     EditDeck,
     EditCard,
@@ -101,7 +103,7 @@ impl Screen {
             let initial_state = self.state.clone();
             if poll(Duration::from_millis(200))? {
                 if let Event::Key(key) = read()? {
-                    match *self.edit_mode {
+                    match (*self.edit_mode).clone() {
                         EditMode::None => match key.code {
                             KeyCode::Char('e') => {
                                 if self.local_menu_state.borrow().selected().unwrap()
@@ -109,13 +111,10 @@ impl Screen {
                                 {
                                     continue;
                                 }
-                                self.edit_mode = Rc::new(EditMode::EditDeck);
-                                if let Some(current_selection) =
-                                    self.local_menu_state.borrow().selected()
-                                {
-                                    self.new_deck_name =
-                                        Rc::new(self.local_decks_names[current_selection].clone());
-                                }
+                                let mut state = ListState::default();
+                                state.select(Some(0));
+                                self.edit_mode =
+                                    Rc::new(EditMode::EditMenu(Rc::new(RefCell::new(state))));
                             }
                             KeyCode::Char('q') => break,
                             KeyCode::Down => match *initial_state {
@@ -186,6 +185,57 @@ impl Screen {
                                 ScreenState::DeckViewer => {
                                     self.current_deck = Rc::new(RefCell::new(Deck::default()));
                                     self.state = Rc::new(ScreenState::LocalMenu);
+                                }
+                                _ => (),
+                            },
+                            _ => (),
+                        },
+                        EditMode::EditMenu(menu_state) => match key.code {
+                            KeyCode::Up => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    let new_state =
+                                        util::offset_state(&menu_state.borrow(), 1, false, 1);
+                                    self.edit_mode = Rc::new(EditMode::EditMenu(Rc::new(
+                                        RefCell::new(new_state),
+                                    )));
+                                }
+                                _ => (),
+                            },
+                            KeyCode::Down => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    let new_state =
+                                        util::offset_state(&menu_state.borrow(), 1, true, 1);
+                                    self.edit_mode = Rc::new(EditMode::EditMenu(Rc::new(
+                                        RefCell::new(new_state),
+                                    )));
+                                }
+                                _ => (),
+                            },
+
+                            KeyCode::Esc => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    self.edit_mode = Rc::new(EditMode::None);
+                                    terminal.clear()?;
+                                }
+                                _ => (),
+                            },
+                            KeyCode::Enter => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    if let Some(item_index) = menu_state.borrow().selected() {
+                                        if item_index == 0 {
+                                            if let Some(current_selection) =
+                                                self.local_menu_state.borrow().selected()
+                                            {
+                                                self.new_deck_name = Rc::new(
+                                                    self.local_decks_names[current_selection]
+                                                        .clone(),
+                                                );
+                                            }
+                                            self.edit_mode = Rc::new(EditMode::EditDeck);
+                                        } else {
+                                            self.edit_mode = Rc::new(EditMode::EditCard);
+                                        }
+                                    }
                                 }
                                 _ => (),
                             },
@@ -463,7 +513,18 @@ impl Screen {
         area: &Rect,
     ) -> () {
         match *self.state.clone() {
-            ScreenState::LocalMenu => match *self.edit_mode {
+            ScreenState::LocalMenu => match &*self.edit_mode {
+                EditMode::EditMenu(menu_state) => {
+                    let list_items = vec![
+                        ListItem::new("Edit Deck Name"),
+                        ListItem::new("Edit/Add Cards"),
+                    ];
+                    let right_panel = List::new(list_items)
+                        .block(Block::default().borders(Borders::ALL).title(" Edit Menu "))
+                        .style(Style::default().fg(Color::White))
+                        .highlight_style(Style::default().bg(Color::White).fg(Color::Black));
+                    f.render_stateful_widget(right_panel, *area, &mut menu_state.borrow_mut())
+                }
                 EditMode::AddDeck => {
                     let text = vec![Spans::from((*self.new_deck_name).clone())];
 
