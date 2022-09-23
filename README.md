@@ -1,6 +1,6 @@
 # flash-client
 ![](https://img.shields.io/badge/license-MIT-blueviolet.svg)
-![](https://tokei.rs/b1/github/Peter-Lande/flash-client?category=code)(https://github.com/Peter-Lande/flash-client)
+[![](https://tokei.rs/b1/github/Peter-Lande/flash-client?category=code)](https://github.com/Peter-Lande/flash-client)
 
 A TUI for making, using, and sharing flash cards.
 
