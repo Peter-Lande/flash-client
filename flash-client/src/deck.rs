@@ -1,4 +1,8 @@
-use std::{fs::read_dir, path::Path};
+use std::{
+    error::Error,
+    fs::read_dir,
+    path::{Path, PathBuf},
+};
 
 use tui::widgets::Widget;
 
@@ -7,7 +11,7 @@ use crate::card::Card;
 #[derive(Clone, Debug, Default)]
 pub struct Deck {
     pub deck_title: String,
-    contents: Box<[Card]>,
+    pub contents: Box<[Card]>,
     pub cur_card: usize,
 }
 
@@ -59,16 +63,33 @@ impl Deck {
         return Err(String::from("Failed to read directory."));
     }
 
-    pub fn increment_deck(&mut self) -> Option<usize> {
+    pub fn write_to_dir(self, mut parent_path: PathBuf) -> Result<(), Box<dyn Error>> {
+        parent_path.push(self.deck_title);
+        for card in self.contents.into_vec().into_iter() {
+            let new_card = Card {
+                title: card.title,
+                sections: card.sections,
+                current_section: 0,
+            };
+            new_card.write_to_file(parent_path.to_path_buf())?;
+        }
+        Ok(())
+    }
+
+    pub fn increment_deck(&mut self, change_card: bool) -> Option<usize> {
         if !self.contents.is_empty() {
             if let None = self.contents[self.cur_card].increment_section() {
-                if let Some(i) = self.cur_card.checked_add(1) {
-                    if i >= self.contents.len() {
-                        self.cur_card = self.contents.len() - 1;
-                        return Some(self.cur_card);
+                if change_card {
+                    if let Some(i) = self.cur_card.checked_add(1) {
+                        if i >= self.contents.len() {
+                            self.cur_card = self.contents.len() - 1;
+                            return Some(self.cur_card);
+                        } else {
+                            self.cur_card = i;
+                            return Some(i);
+                        }
                     } else {
-                        self.cur_card = i;
-                        return Some(i);
+                        return None;
                     }
                 } else {
                     return None;
@@ -81,16 +102,20 @@ impl Deck {
         }
     }
 
-    pub fn decrement_deck(&mut self) -> Option<usize> {
+    pub fn decrement_deck(&mut self, change_card: bool) -> Option<usize> {
         if !self.contents.is_empty() {
             if let None = self.contents[self.cur_card].decrement_section() {
-                if let Some(i) = self.cur_card.checked_sub(1) {
-                    if i >= self.contents.len() {
-                        self.cur_card = self.contents.len() - 1;
-                        return Some(self.cur_card);
+                if change_card {
+                    if let Some(i) = self.cur_card.checked_sub(1) {
+                        if i >= self.contents.len() {
+                            self.cur_card = self.contents.len() - 1;
+                            return Some(self.cur_card);
+                        } else {
+                            self.cur_card = i;
+                            return Some(i);
+                        }
                     } else {
-                        self.cur_card = i;
-                        return Some(i);
+                        return None;
                     }
                 } else {
                     return None;
