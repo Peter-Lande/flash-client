@@ -5,7 +5,7 @@
 A TUI for making, using, and sharing flash cards.
 
 ## Usage
-To be written.
+Currently to be able to successfully run this program you will need to place a config.ini file with a group called Setup and a field called local_dir in the same directory as the binary. The local_dir field should be an absolute path pointing to a directory you would like to use for storing local decks. 
 
 ## Features
 1. Easy to use UI that allows for navigating between decks
