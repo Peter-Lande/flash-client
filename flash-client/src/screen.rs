@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     cmp::min,
-    env,
     error::Error,
     fs,
     io::{stdout, Stdout},
@@ -15,6 +14,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use dirs::home_dir;
 use ini::Ini;
 use tui::{
     backend::{Backend, CrosstermBackend},
@@ -71,28 +71,41 @@ impl Screen {
         local_list_state.select(Some(0));
         let mut edit_list_state = ListState::default();
         edit_list_state.select(Some(0));
-        let mut cur_dir = env::current_exe()?;
-        cur_dir.pop();
-        cur_dir.push("config.ini");
-        let config = Ini::load_from_file(cur_dir)?;
-        if let Some(setup) = config.section(Some("Setup")) {
-            if let Some(local_path) = setup.get("local_dir") {
-                let screen_options = ScreenOptions::new(local_path);
-                return Ok(Screen {
-                    state: Rc::new(state),
-                    local_menu_state: Rc::new(RefCell::new(local_list_state)),
-                    edit_menu_state: Rc::new(RefCell::new(edit_list_state)),
-                    local_decks_names: Screen::get_current_local_decks(&screen_options)
-                        .into_boxed_slice(),
-                    current_deck: Rc::new(RefCell::new(Deck::default())),
-                    edit_mode: Rc::new(EditMode::None),
-                    edit_failed: false,
-                    right_panel_text_field: Rc::new(String::default()),
-                    options: Rc::new(screen_options),
-                });
+        if let Some(mut config_dir) = home_dir() {
+            config_dir.push(".flashrust");
+            let mut local_dir = config_dir.clone();
+            if let Ok(_) = fs::create_dir_all(&config_dir) {
+                let mut config = Ini::new();
+                local_dir.push("decks");
+                local_dir.push("local");
+                fs::create_dir_all(&local_dir)?;
+                config
+                    .with_section(Some("Setup"))
+                    .set("local_dir", local_dir.as_os_str().to_str().unwrap());
+                config_dir.push("config.ini");
+                config.write_to_file(&config_dir)?;
             }
+            let config = Ini::load_from_file(config_dir)?;
+            if let Some(setup) = config.section(Some("Setup")) {
+                if let Some(local_path) = setup.get("local_dir") {
+                    let screen_options = ScreenOptions::new(local_path);
+                    return Ok(Screen {
+                        state: Rc::new(state),
+                        local_menu_state: Rc::new(RefCell::new(local_list_state)),
+                        edit_menu_state: Rc::new(RefCell::new(edit_list_state)),
+                        local_decks_names: Screen::get_current_local_decks(&screen_options)
+                            .into_boxed_slice(),
+                        current_deck: Rc::new(RefCell::new(Deck::default())),
+                        edit_mode: Rc::new(EditMode::None),
+                        edit_failed: false,
+                        right_panel_text_field: Rc::new(String::default()),
+                        options: Rc::new(screen_options),
+                    });
+                }
+            }
+            return Err("Failed to read config file.")?;
         }
-        return Err("Fuck")?;
+        return Err("Home directory not set, please make a home directory.")?;
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -147,6 +160,46 @@ impl Screen {
                                                 .sections[current_section]
                                                 .clone(),
                                         );
+                                    }
+                                }
+                                _ => (),
+                            },
+                            KeyCode::Char('d') => match *initial_state {
+                                ScreenState::LocalMenu => {
+                                    let current_deck =
+                                        self.local_menu_state.borrow().selected().unwrap();
+                                    if current_deck == self.local_decks_names.len() - 1 {
+                                        continue;
+                                    }
+                                    let mut temp_vec = self.local_decks_names.clone().to_vec();
+                                    let mut deck_path = self.options.local_directory.clone();
+                                    deck_path.push(&temp_vec[current_deck]);
+                                    fs::remove_dir_all(deck_path)?;
+                                    temp_vec.remove(current_deck);
+                                    self.local_decks_names = temp_vec.into_boxed_slice();
+                                    let end = self.local_decks_names.len() - 1;
+                                    if current_deck >= end {
+                                        self.local_menu_state.borrow_mut().select(Some(end - 1));
+                                    }
+                                }
+                                ScreenState::DeckEditor => {
+                                    let current_card =
+                                        self.edit_menu_state.borrow().selected().unwrap();
+                                    if current_card == self.current_deck.borrow().len() {
+                                        continue;
+                                    }
+                                    let mut temp_vec =
+                                        self.current_deck.borrow().contents.clone().into_vec();
+                                    let mut card_path = self.options.local_directory.clone();
+                                    card_path.push(&self.current_deck.borrow().deck_title);
+                                    card_path.push(temp_vec[current_card].saved_name());
+                                    fs::remove_file(card_path)?;
+                                    temp_vec.remove(current_card);
+                                    self.current_deck.borrow_mut().contents =
+                                        temp_vec.into_boxed_slice();
+                                    let end = self.current_deck.borrow().len();
+                                    if current_card >= end {
+                                        self.edit_menu_state.borrow_mut().select(Some(end - 1));
                                     }
                                 }
                                 _ => (),
@@ -393,6 +446,22 @@ impl Screen {
                                             ));
                                             self.current_deck.borrow_mut().contents =
                                                 temp_vec.into_boxed_slice();
+                                            self.current_deck.take().write_to_dir(
+                                                self.options.local_directory.clone(),
+                                            )?;
+                                            let mut cur_dir: PathBuf =
+                                                self.options.local_directory.clone();
+                                            cur_dir.push(
+                                                &self.local_decks_names[self
+                                                    .local_menu_state
+                                                    .borrow()
+                                                    .selected()
+                                                    .unwrap_or_default()],
+                                            );
+                                            if let Ok(deck) = Deck::read_from_dir(&cur_dir) {
+                                                self.current_deck = Rc::new(RefCell::new(deck));
+                                            }
+
                                             self.right_panel_text_field =
                                                 Rc::new(String::default());
                                             self.edit_mode = Rc::new(EditMode::None);
@@ -459,25 +528,37 @@ impl Screen {
                                     let current_section = self.current_deck.borrow().contents
                                         [current_card]
                                         .current_section;
-                                    self.current_deck.borrow_mut().contents[current_card]
+                                    if !self.current_deck.borrow().contents[current_card]
                                         .sections
-                                        .remove(current_section);
-                                    if self.current_deck.borrow().contents[current_card].len()
-                                        == current_section
+                                        .is_empty()
                                     {
-                                        self.right_panel_text_field = Rc::new(
-                                            self.current_deck.borrow().contents[current_card]
-                                                .sections[current_section - 1]
-                                                .clone(),
-                                        );
                                         self.current_deck.borrow_mut().contents[current_card]
-                                            .decrement_section();
-                                    } else {
-                                        self.right_panel_text_field = Rc::new(
-                                            self.current_deck.borrow().contents[current_card]
-                                                .sections[current_section]
-                                                .clone(),
-                                        );
+                                            .sections
+                                            .remove(current_section);
+                                        let sections_vec_length =
+                                            self.current_deck.borrow().contents[current_card].len();
+                                        if sections_vec_length == current_section {
+                                            if sections_vec_length == 0 {
+                                                self.right_panel_text_field =
+                                                    Rc::new(String::default());
+                                            } else {
+                                                self.right_panel_text_field = Rc::new(
+                                                    self.current_deck.borrow().contents
+                                                        [current_card]
+                                                        .sections[current_section - 1]
+                                                        .clone(),
+                                                );
+                                                self.current_deck.borrow_mut().contents
+                                                    [current_card]
+                                                    .decrement_section();
+                                            }
+                                        } else {
+                                            self.right_panel_text_field = Rc::new(
+                                                self.current_deck.borrow().contents[current_card]
+                                                    .sections[current_section]
+                                                    .clone(),
+                                            );
+                                        }
                                     }
                                 }
                                 _ => (),
@@ -550,9 +631,16 @@ impl Screen {
                                     let current_section = self.current_deck.borrow().contents
                                         [current_card]
                                         .current_section;
-                                    self.current_deck.borrow_mut().contents[current_card]
-                                        .sections[current_section] =
-                                        self.right_panel_text_field.clone().to_string();
+                                    if self.current_deck.borrow().contents[current_card].len() == 0
+                                    {
+                                        self.current_deck.borrow_mut().contents[current_card]
+                                            .sections
+                                            .push(self.right_panel_text_field.clone().to_string());
+                                    } else {
+                                        self.current_deck.borrow_mut().contents[current_card]
+                                            .sections[current_section] =
+                                            self.right_panel_text_field.clone().to_string();
+                                    }
                                     self.right_panel_text_field = Rc::new(String::default());
                                     self.edit_mode = Rc::new(EditMode::None);
                                     terminal.clear()?;
@@ -591,9 +679,16 @@ impl Screen {
                                     let current_section = self.current_deck.borrow().contents
                                         [current_card]
                                         .current_section;
-                                    self.current_deck.borrow_mut().contents[current_card]
-                                        .sections[current_section] =
-                                        self.right_panel_text_field.clone().to_string();
+                                    if self.current_deck.borrow().contents[current_card].len() == 0
+                                    {
+                                        self.current_deck.borrow_mut().contents[current_card]
+                                            .sections
+                                            .push(self.right_panel_text_field.clone().to_string());
+                                    } else {
+                                        self.current_deck.borrow_mut().contents[current_card]
+                                            .sections[current_section] =
+                                            self.right_panel_text_field.clone().to_string();
+                                    }
                                     (*self.current_deck).borrow_mut().increment_deck(false);
                                     let current_card = self.current_deck.borrow().cur_card;
                                     let current_section = self.current_deck.borrow().contents
@@ -613,9 +708,16 @@ impl Screen {
                                     let current_section = self.current_deck.borrow().contents
                                         [current_card]
                                         .current_section;
-                                    self.current_deck.borrow_mut().contents[current_card]
-                                        .sections[current_section] =
-                                        self.right_panel_text_field.clone().to_string();
+                                    if self.current_deck.borrow().contents[current_card].len() == 0
+                                    {
+                                        self.current_deck.borrow_mut().contents[current_card]
+                                            .sections
+                                            .push(self.right_panel_text_field.clone().to_string());
+                                    } else {
+                                        self.current_deck.borrow_mut().contents[current_card]
+                                            .sections[current_section] =
+                                            self.right_panel_text_field.clone().to_string();
+                                    }
                                     (*self.current_deck).borrow_mut().decrement_deck(false);
                                     let current_card = self.current_deck.borrow().cur_card;
                                     let current_section = self.current_deck.borrow().contents
@@ -721,30 +823,58 @@ impl Screen {
 
     fn render_footer(&self, f: &mut tui::Frame<CrosstermBackend<Stdout>>, area: &Rect) -> () {
         match *self.state.clone() {
-            ScreenState::LocalMenu => {
-                let mut text_vec = vec![
-                    Span::raw("Selected '"),
-                    Span::raw(
-                        self.local_decks_names[self.local_menu_state.borrow().selected().unwrap()]
+            ScreenState::LocalMenu => match *self.edit_mode {
+                EditMode::None => {
+                    let mut text_vec = vec![
+                        Span::raw("Selected '"),
+                        Span::raw(
+                            self.local_decks_names
+                                [self.local_menu_state.borrow().selected().unwrap()]
                             .clone(),
-                    ),
-                    Span::raw("' Navigate (↑/↓) Select (Enter) "),
-                    Span::raw("(e)dit "),
-                    Span::raw("(q)uit"),
-                ];
-                if self.local_menu_state.borrow().selected().unwrap()
-                    == (self.local_decks_names.len() - 1)
-                {
-                    let keep = [true, true, true, false, true];
-                    let mut iter = keep.iter();
-                    text_vec.retain(|_| *iter.next().unwrap());
+                        ),
+                        Span::raw("' Navigate (↑/↓) Select (Enter) "),
+                        Span::raw("(e)dit "),
+                        Span::raw("(d)elete "),
+                        Span::raw("(q)uit"),
+                    ];
+                    if self.local_menu_state.borrow().selected().unwrap()
+                        == (self.local_decks_names.len() - 1)
+                    {
+                        let keep = [true, true, true, false, false, true];
+                        let mut iter = keep.iter();
+                        text_vec.retain(|_| *iter.next().unwrap());
+                    }
+                    let text = vec![Spans::from(text_vec)];
+                    let footer = Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left);
+                    f.render_widget(footer, *area);
                 }
-                let text = vec![Spans::from(text_vec)];
-                let footer = Paragraph::new(text)
-                    .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
-                    .alignment(Alignment::Left);
-                f.render_widget(footer, *area);
-            }
+                EditMode::EditMenu(_) => {
+                    let text_vec = vec![Span::raw("Navigate (↑/↓) Select (Enter) Go Back (esc)")];
+                    let text = vec![Spans::from(text_vec)];
+                    let footer = Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left);
+                    f.render_widget(footer, *area);
+                }
+                EditMode::AddItem => {
+                    let text_vec = vec![Span::raw("Save (Enter) Go back (esc) Undo (Backspace)")];
+                    let text = vec![Spans::from(text_vec)];
+                    let footer = Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left);
+                    f.render_widget(footer, *area);
+                }
+                EditMode::EditContent => {
+                    let text_vec = vec![Span::raw("Save (Enter) Go back (esc) Undo (Backspace)")];
+                    let text = vec![Spans::from(text_vec)];
+                    let footer = Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left);
+                    f.render_widget(footer, *area);
+                }
+            },
             ScreenState::DeckViewer => {
                 let text = vec![Spans::from(vec![Span::raw(
                     "Next Section/Next Card (←/→) Return to Menu (Esc) (q)uit",
@@ -754,29 +884,47 @@ impl Screen {
                     .alignment(Alignment::Left);
                 f.render_widget(footer, *area);
             }
-            ScreenState::DeckEditor => {
-                let mut temp_vec = self.current_deck.borrow().get_card_names();
-                temp_vec.push(String::from("Add new card..."));
-                let mut text_vec = vec![
-                    Span::raw("Selected '"),
-                    Span::raw(temp_vec[self.edit_menu_state.borrow().selected().unwrap()].clone()),
-                    Span::raw("' Navigate (↑/↓) Select (Enter) "),
-                    Span::raw("(e)dit "),
-                    Span::raw("(q)uit"),
-                ];
-                if self.local_menu_state.borrow().selected().unwrap()
-                    == (self.local_decks_names.len() - 1)
-                {
-                    let keep = [true, true, true, false, true];
-                    let mut iter = keep.iter();
-                    text_vec.retain(|_| *iter.next().unwrap());
+            ScreenState::DeckEditor => match *self.edit_mode {
+                EditMode::None => {
+                    let mut temp_vec = self.current_deck.borrow().get_card_names();
+                    temp_vec.push(String::from("Add new card..."));
+                    let mut text_vec = vec![
+                        Span::raw("Selected '"),
+                        Span::raw(
+                            temp_vec[self.edit_menu_state.borrow().selected().unwrap()].clone(),
+                        ),
+                        Span::raw("' Navigate (↑/↓) Select (Enter) "),
+                        Span::raw("(e)dit "),
+                        Span::raw("(d)elete "),
+                        Span::raw("(q)uit"),
+                    ];
+                    if self.local_menu_state.borrow().selected().unwrap()
+                        == (self.local_decks_names.len() - 1)
+                    {
+                        let keep = [true, true, true, false, false, true];
+                        let mut iter = keep.iter();
+                        text_vec.retain(|_| *iter.next().unwrap());
+                    }
+                    let text = vec![Spans::from(text_vec)];
+                    let footer = Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left);
+                    f.render_widget(footer, *area);
                 }
-                let text = vec![Spans::from(text_vec)];
-                let footer = Paragraph::new(text)
-                    .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
-                    .alignment(Alignment::Left);
-                f.render_widget(footer, *area);
-            }
+                EditMode::EditContent => {
+                    let mut temp_vec = self.current_deck.borrow().get_card_names();
+                    temp_vec.push(String::from("Add new card..."));
+                    let text_vec = vec![Span::raw(
+                        "Next Section (←/→) Finish (Enter) Delete (ctrl-d) Add (ctrl-a) (q)uit",
+                    )];
+                    let text = vec![Spans::from(text_vec)];
+                    let footer = Paragraph::new(text)
+                        .block(Block::default().borders(Borders::TOP | Borders::BOTTOM))
+                        .alignment(Alignment::Left);
+                    f.render_widget(footer, *area);
+                }
+                _ => (),
+            },
         }
     }
 

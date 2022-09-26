@@ -12,6 +12,7 @@ Currently to be able to successfully run this program you will need to place a c
 2. Allows for studying decks
 3. Creation of new decks locally 
 4. Editing and adding of decks, cards, and sections
-5. Deleting decks and cards (in-progress)
-6. Shuffles decks based on how well you understand the content (planned)
-7. Access remote servers to download and share decks (planned)
+5. Deleting decks and cards 
+6. Customize save locations in app (planned)
+7. Shuffles decks based on how well you understand the content (planned)
+8. Access remote servers to download and share decks (planned)

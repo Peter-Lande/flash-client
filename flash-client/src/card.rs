@@ -29,7 +29,7 @@ impl Card {
     }
 
     pub fn write_to_file(self, mut parent_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-        parent_path.push(&(self.title.clone() + ".json"));
+        parent_path.push(self.saved_name());
         let file_path = parent_path;
         let object_string_result = serde_json::to_string(&self)
             .or_else(|err| Err(Box::new(err) as Box<dyn std::error::Error>));
@@ -74,7 +74,7 @@ impl Card {
             return Paragraph::new(text).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(self.title.to_owned())
+                    .title(self.pad_title())
                     .title_alignment(Alignment::Center),
             );
         } else {
@@ -82,7 +82,7 @@ impl Card {
             return Paragraph::new(text).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(self.title.to_owned())
+                    .title(self.pad_title())
                     .title_alignment(Alignment::Center),
             );
         }
@@ -90,5 +90,13 @@ impl Card {
 
     pub fn len(&self) -> usize {
         return self.sections.len();
+    }
+
+    pub fn saved_name(&self) -> String {
+        return self.title.clone() + ".json";
+    }
+
+    pub fn pad_title(&self) -> String {
+        return String::from(" ") + &(self.title.clone() + " ");
     }
 }
