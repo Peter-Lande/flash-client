@@ -1,6 +1,8 @@
 # flash-client
 ![](https://img.shields.io/badge/license-MIT-blueviolet.svg)
 [![](https://tokei.rs/b1/github/Peter-Lande/flash-client?category=code)](https://github.com/Peter-Lande/flash-client)
+[![Crates.io](https://img.shields.io/crates/v/flash-client.svg)](https://crates.io/crates/flash-client)
+![](https://img.shields.io/github/v/release/Peter-Lande/flash-client?color=%23c694ff)
 
 A pure Rust TUI for making, using, and sharing flash cards. Flash aims to be a simplistic and useful study tool. This is my first major project in Rust and any feedback would be greatly appreciated. Happy studying!
 
