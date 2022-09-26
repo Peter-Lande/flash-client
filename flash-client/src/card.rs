@@ -45,7 +45,6 @@ impl Card {
     pub fn increment_section(&mut self) -> Option<usize> {
         if let Some(i) = self.current_section.checked_add(1) {
             if i >= self.sections.len() {
-                self.current_section = self.sections.len() - 1;
                 return None;
             }
             self.current_section = i;
@@ -57,8 +56,7 @@ impl Card {
 
     pub fn decrement_section(&mut self) -> Option<usize> {
         if let Some(i) = self.current_section.checked_sub(1) {
-            if i > self.sections.len() {
-                self.current_section = self.sections.len();
+            if i >= self.sections.len() {
                 return None;
             }
             self.current_section = i;
