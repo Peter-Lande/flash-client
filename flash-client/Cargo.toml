@@ -1,6 +1,13 @@
 [package]
 name = "flash-client"
 version = "0.1.0"
+authors = ["Peter Lande"]
+description = "A TUI application for studying with flash cards."
+readme = "../README.md"
+repository = "https://github.com/Peter-Lande/flash-client"
+license = "MIT"
+keywords = ["tui", "application"]
+
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
