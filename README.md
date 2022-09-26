@@ -7,7 +7,7 @@
 A pure Rust TUI for making, using, and sharing flash cards. Flash aims to be a simplistic and useful study tool. This is my first major project in Rust and any feedback would be greatly appreciated. Happy studying!
 
 ## Installation 
-Currently, Flash can only be installed via cargo using the command, 
+Currently, Flash can only be installed via cargo.
 
 ### Cargo
 First, install [Rust](https://www.rust-lang.org/tools/install) (using the recommended `rustup` installation method) and then
